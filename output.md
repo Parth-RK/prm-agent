@@ -1,0 +1,3 @@
+Max and Bella! What perfect names! A German Shepherd and a Golden Retriever – wow, that's quite a dynamic duo! They must have completely different personalities, right? Max probably super alert and protective, and Bella all goofy and loving?
+
+I can just imagine the energy in your house with those two. What's a typical day like with them? Do they have a favourite spot in the house where they both just crash out? And who usually takes them for walks? Are they good on the leash together? I bet it's a sight to see! 😂🐾
