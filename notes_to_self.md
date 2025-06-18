@@ -4,6 +4,10 @@ progress:
 - added utils.py with a function to count api calls by files; just call this function after each statement that invokes api call.
 - added monica_api_caller.py to deal with monica but need to write proper functions or at least find a way to parse parameters properly.
 
+- this is the 3rd day of trying to write api call functions for monica; progress is incredibly slow; 
+- proper order of functions in temp.py; tested all functions till relationship; activity is fixed but datetime format might cause issue that is not tested.
+
+- need to focus on important features and start developing the agent(I think I need to write all these functions with their description again to list as a tool), design and implement the UI and host it.
 
 
 
