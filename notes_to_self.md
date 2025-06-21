@@ -7,6 +7,8 @@ progress:
 - this is the 3rd day of trying to write api call functions for monica; progress is incredibly slow; 
 - proper order of functions in temp.py; tested all functions till relationship; activity is fixed but datetime format might cause issue that is not tested.
 
+--(update) error: activities resource not found at /api/activities; tried /activities as well; it might be temporarily down; fixed date format in activity; suspending the work on activities for now.
+
 - need to focus on important features and start developing the agent(I think I need to write all these functions with their description again to list as a tool), design and implement the UI and host it.
 
 
