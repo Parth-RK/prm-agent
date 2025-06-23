@@ -4,7 +4,7 @@ import os
 import json
 from google import genai
 from google.genai import types
-import temp as monica_api
+import monica_alf as alf
 
 class MonicaDataAgent:
     """
@@ -18,21 +18,30 @@ class MonicaDataAgent:
 
         self.client = genai.Client(api_key=api_key)
         self.tools = [
-            monica_api.create_contact,
-            monica_api.get_contact_by_name,
-            monica_api.list_contacts,
-            monica_api.create_note,
-            monica_api.list_contact_notes,
-            monica_api.create_task,
-            monica_api.list_tasks,
-            monica_api.set_contact_occupation,
+            alf.remember_person,
+            alf.find_people,
+            alf.get_details_about_person,
+            alf.forget_person,
+            alf.remember_something_about,
+            alf.get_memories_about,
+            alf.log_call_with,
+            alf.start_conversation_with,
+            alf.add_message_to_conversation,
+            alf.set_relationship,
+            alf.create_task_for,
+            alf.mark_task_as_complete,
+            alf.set_reminder_for,
+            alf.track_debt,
+            alf.log_gift,
+            alf.log_job_for_person,
+            alf.tag_person,
+            alf.untag_person,
         ]
 
         self.system_instruction = """You are a data processing agent. Your job is to execute functions based on the user's request.
-            - If you need to perform an action on a contact (like adding a note or task), ALWAYS use the 'get_contact_by_name' tool first to find their ID.
-            - If the request is to create a new contact, you can use the 'create_contact' tool directly.
-            - After executing a tool, output the raw JSON result directly. Do not add any conversational text."""
-
+        - To find an existing contact's ID for an action (like adding a note or task), ALWAYS use the 'find_people' tool first.
+        - To create a new contact, use the 'remember_person' tool.
+        - After executing a tool, output the raw JSON result directly. Do not add any conversational text."""
 
     def execute_task(self, task_prompt: str) -> str:
         """
@@ -46,7 +55,7 @@ class MonicaDataAgent:
                 contents=task_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=self.system_instruction,
-                    tools=self.tools
+                    tools=self.tools,
                 )
             )
 
@@ -66,7 +75,7 @@ class MonicaDataAgent:
 
             print(f"  [Data Agent] Executing tool: {tool_name} with args: {tool_args}")
 
-            tool_function = getattr(monica_api, tool_name)
+            tool_function = getattr(alf, tool_name)
             tool_result = tool_function(**tool_args)
 
             return json.dumps(tool_result, default=str)
@@ -85,3 +94,8 @@ if __name__ == "__main__":
         print("Executed Task Result:", executed_task)
     else:
         print("GEMINI_API_KEY not found in environment.")
+
+    print("== Cleaning up resources ==")
+    for i in range(5):    
+        forget_person = alf.forget_person("John Doe")
+        print("Forget Person Result:", forget_person)

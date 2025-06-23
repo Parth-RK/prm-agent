@@ -131,7 +131,47 @@ def get_contact(contact_id: int) -> Dict[str, Any]:
     return call(f"contacts/{contact_id}")
 
 def create_contact(first_name: str, **kwargs: Any) -> Dict[str, Any]:
-    """POST /contacts - Creates a new contact. 'first_name' is required."""
+    """POST /contacts - Creates a new contact. 'first_name' is required.
+
+    This function sets some boolean flags to False by default to ensure proper
+    API behavior. To associate a birthdate or deceased date, you must provide
+    the date components and set the corresponding 'is...known' flag to True.
+
+    Args:
+        first_name (str): The first name of the person. This is required.
+        **kwargs: Arbitrary keyword arguments that are passed directly to the
+            API payload. Supported optional parameters include:
+            - last_name (str): The contact's last name.
+            - nickname (str): The contact's nickname.
+            - gender_id (int): The ID for the gender (from list_genders()).
+            - is_birthdate_known (bool): Must be True if providing date parts.
+            - birthdate_year (int): Year of birth.
+            - birthdate_month (int): Month of birth (1-12).
+            - birthdate_day (int): Day of birth (1-31).
+            - is_deceased (bool): Set to True if the contact is deceased.
+            - is_deceased_date_known (bool): Must be True if providing date.
+            - food_preferences (str): Notes on food preferences.
+            - how_we_met (str): Description of how you met.
+            - work_job_title (str): The contact's job title.
+            - work_company_name (str): The contact's employer.
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the newly created contact
+                        as returned by the API.
+
+    Example:
+        create_contact(
+            first_name="Jane",
+            last_name="Doe",
+            nickname="Janie",
+            gender_id=2,  # Assuming 'Woman' is ID 2
+            is_birthdate_known=True,
+            birthdate_year=1990,
+            birthdate_month=5,
+            birthdate_day=15,
+            work_job_title="Software Engineer"
+        )
+    """
     payload = {"first_name": first_name, "is_birthdate_known": False, "is_deceased": False, "is_deceased_date_known": False}
     payload.update(kwargs)
     return call("contacts", "POST", payload)
@@ -170,7 +210,43 @@ def set_contact_occupation(contact_id: int, job_title: str = "", company_name: s
 # === Contact Sub-Resources: Addresses ===
 
 def add_address(contact_id: int, name: str, **kwargs: Any) -> Dict[str, Any]:
-    """POST /addresses - Creates a new address for a contact."""
+    """POST /addresses - Creates a new address and associates it with a contact.
+
+    This function requires the ID of the contact and a descriptive name for
+    the address. All other address components are optional and can be passed
+    as keyword arguments.
+
+    Args:
+        contact_id (int): The unique ID of the contact to whom this address
+                          will be linked. This is required.
+        name (str): A descriptive label for the address (e.g., "Home", "Work",
+                    "Mailing Address"). This is required.
+        **kwargs: Arbitrary keyword arguments that are passed directly
+            to the API. Supported optional parameters include:
+            - street (str): The street and number.
+            - city (str): The city name.
+            - province (str): The state or province name.
+            - postal_code (str): The ZIP or postal code.
+            - country (str): The 2-letter ISO code for the country (e.g., 'US').
+            - latitude (float): The geographic latitude.
+            - longitude (float): The geographic longitude.
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the newly created address
+                        object as returned by the API.
+
+    Example:
+        # Assuming you have a contact with ID 123
+        add_address(
+            contact_id=123,
+            name="Work Office",
+            street="123 Innovation Drive, Suite 404",
+            city="Palo Alto",
+            province="CA",
+            postal_code="94301",
+            country="US"
+        )
+    """
     payload = {"contact_id": contact_id, "name": name}
     payload.update(kwargs)
     return call("addresses", "POST", payload=payload)
@@ -245,7 +321,7 @@ def delete_relationship(relationship_id: int) -> Optional[Dict[str, Any]]:
 
 
 # === Activities ===
-
+"""Activities are not working for unknown reasons."""
 # def list_all_activities(page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
 #     """GET /activities - Lists all activities across all contacts."""
 #     return call("activities", params={"page": page, "limit": limit})
@@ -822,7 +898,38 @@ def get_company(company_id: int) -> Dict[str, Any]:
     return call(f"companies/{company_id}")
 
 def create_company(name: str, **kwargs: Any) -> Dict[str, Any]:
-    """POST /companies - Creates a company."""
+    """POST /companies - Creates a new company in Monica.
+
+    This function takes the company's name as a required argument and
+    allows for any other supported API fields to be passed as keyword
+    arguments.
+
+    Args:
+        name (str): The name of the company. This is required.
+        **kwargs: Arbitrary keyword arguments that are passed directly
+            to the API. Supported optional parameters include:
+            - website (str): The company's website address.
+            - number_of_employees (int): The number of employees.
+            - type (str): The type of company (e.g., "Corporation").
+            - industry (str): The industry the company is in.
+            - street (str): The street address.
+            - city (str): The city name.
+            - province (str): The state or province name.
+            - postal_code (str): The ZIP or postal code.
+            - country (str): The 2-letter ISO code for the country (e.g., 'US').
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the newly created company
+                        as returned by the API.
+
+    Example:
+        create_company(
+            name="Innovate Corp",
+            website="https://innovatecorp.com",
+            industry="Technology",
+            city="San Francisco"
+        )
+    """
     payload = {"name": name}
     payload.update(kwargs)
     return call("companies", "POST", payload)

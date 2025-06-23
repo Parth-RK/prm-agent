@@ -87,20 +87,20 @@ def remember_person(
     Returns:
         A confirmation string with the new contact's name and ID.
     """
-    genders = monica_api.list_genders()
-    gender_id = None
-    for gender in genders:
-        if gender['name'].lower() == gender_name.lower():
-            gender_id = gender['id']
-            break
-    if gender_id is None:
-        raise ValueError(f"Gender '{gender_name}' is not a valid option. Please choose from the available genders.")
+    # genders = monica_api.list_genders()
+    # gender_id = None
+    # for gender in genders:
+    #     if gender['name'].lower() == gender_name.lower():
+    #         gender_id = gender['id']
+    #         break
+    # if gender_id is None:
+    #     raise ValueError(f"Gender '{gender_name}' is not a valid option. Please choose from the available genders.")
 
     contact = monica_api.create_contact(
         first_name=first_name, 
         last_name=last_name, 
         nickname=nickname, 
-        gender_id=gender_id
+        # gender_id=gender_id
     )
     return f"Successfully remembered {contact.get('complete_name')} with ID {contact.get('id')}."
 
@@ -123,7 +123,7 @@ def get_details_about_person(person_name: str) -> Dict[str, Any]:
 
 def forget_person(person_name: str) -> str:
     """Deletes a contact from Monica. This action is permanent."""
-    contact = _find_contact_by_name(person_name)
+    contact = monica_api.get_contact_by_name(person_name)
     monica_api.delete_contact(contact['id'])
     return f"Successfully forgot the contact '{person_name}' (ID: {contact['id']})."
 
@@ -306,12 +306,15 @@ def log_job_for_person(person_name: str, job_title: str, company_name: str, star
         A confirmation string.
     """
     contact = _find_contact_by_name(person_name)
-    company = _find_or_create_company(company_name)
-    occupation = monica_api.create_occupation(
-        contact_id=contact['id'], company_id=company['id'],
-        title=job_title, start_date=start_date
+    _find_or_create_company(company_name)
+
+    monica_api.set_contact_occupation(
+        contact_id=contact['id'],
+        job_title=job_title,
+        company_name=company_name
     )
-    return f"Successfully logged that {person_name} works as a {job_title} at {company_name}."
+
+    return f"Successfully logged that {person_name} works as '{job_title}' at {company_name}."
 
 # --- Tags ---
 
