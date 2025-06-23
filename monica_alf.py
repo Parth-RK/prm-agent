@@ -1,79 +1,69 @@
-# == monica_agent_level_functions.py ==
-
 # monica_alf.py
-
 """
-Agent-Level Functions for Monica Personal CRM
+Agent-Level Functions (ALF) for Monica Personal CRM.
 
-This module provides a high-level, agent-friendly interface for interacting 
-with the Monica Personal CRM. It is built on top of the low-level API-calling
-functions in `temp.py`.
+This module provides a high-level, agent-friendly, and robust interface for 
+interacting with the Monica CRM. It is the sole layer responsible for translating 
+natural language concepts into concrete, multi-step API calls where necessary.
 
-Key design principles:
-- **Natural Language Input:** Functions are designed to be called with natural 
-  inputs like names, rather than requiring the agent to manage API-specific IDs.
-- **Robustness and Clarity:** Functions handle common failure cases, such as not 
-  finding a contact or finding multiple, and return clear, actionable error 
-  messages. All categorical inputs (e.g., gift status, reminder frequency) are
-  explicitly listed in the docstrings.
-- **Comprehensive Docstrings:** Each function is thoroughly documented to explain 
-  its purpose, parameters, return values, and any relevant context, enabling an
-  AI agent to understand and use it correctly.
-- **Abstraction:** Complex operations that require multiple API calls (e.g., logging
-  a job which might require creating a company first) are abstracted into a 
-  single, intuitive function call.
+Key Design Principles:
+- **Natural Language Input:** Functions accept names, not IDs.
+- **Structured JSON I/O:** All functions return a structured dictionary,
+  `{"status": "success", "data": ...}` or `{"status": "error", "message": ...}`.
+  This prevents crashes from exceptions and provides clear feedback to the calling agent.
+- **Idempotency & Safety:** Operations are designed to be as safe as possible,
+  using find-or-create patterns where appropriate.
+- **Clarity for AI:** Docstrings are written as specifications for a Gemini
+  tool-using model, clearly defining parameters and expected outcomes.
 """
 
+import json
 from typing import Dict, Any, List, Optional, Literal, Union
 from datetime import datetime
 import temp as monica_api
 
-# --- Helper Functions for Internal Use ---
+# --- Internal Helper Functions ---
 
 def _find_contact_by_name(name: str) -> Dict[str, Any]:
-    """Finds a single contact by name and returns their full contact object."""
+    """
+    Finds a single contact by name and returns a structured response.
+    This is the primary lookup function used by all other functions.
+    """
     results = monica_api.list_contacts(query=name)
     if not results:
-        raise ValueError(f"No contact found matching '{name}'. Please try a different name or create the contact first.")
+        return {"status": "error", "message": f"No contact found matching '{name}'. Please use the 'remember_person' tool to create them first."}
+    
+    # Prioritize exact matches
+    exact_matches = [c for c in results if name.lower() in c.get('complete_name', '').lower()]
+    if len(exact_matches) == 1:
+        return {"status": "success", "data": exact_matches[0]}
+
     if len(results) > 1:
         found_names = [f"{c.get('first_name', '')} {c.get('last_name', '')}".strip() for c in results]
-        raise ValueError(f"Multiple contacts found for '{name}'. Please be more specific. Found: {found_names}")
-    return results[0]
-
-def _find_relationship_type_by_name(name: str) -> Dict[str, Any]:
-    """Finds a relationship type object by its name or reverse name."""
-    all_types = monica_api.list_relationship_types()
-    for rel_type in all_types:
-        if rel_type['name'].lower() == name.lower() or rel_type.get('name_reverse_relationship', '').lower() == name.lower():
-            return rel_type
-    raise ValueError(f"Relationship type '{name}' not found. Please use a valid relationship type.")
-
-def _find_tag_by_name(tag_name: str) -> Optional[Dict[str, Any]]:
-    """Finds a tag by its name."""
-    all_tags = monica_api.list_tags(limit=100) # Get a decent number of tags
-    for tag in all_tags:
-        if tag['name'].lower() == tag_name.lower():
-            return tag
-    return None
+        return {"status": "error", "message": f"Multiple contacts found for '{name}'. Please be more specific. Found: {', '.join(found_names)}"}
+        
+    return {"status": "success", "data": results[0]}
 
 def _find_or_create_company(company_name: str) -> Dict[str, Any]:
-    """Finds a company by name. If not found, creates it."""
+    """Finds a company by name. If not found, creates it. Returns the company object."""
     companies = monica_api.list_companies()
     for company in companies:
         if company['name'].lower() == company_name.lower():
             return company
-    # If not found, create it
     return monica_api.create_company(name=company_name)
+    
+def _find_relationship_type_by_name(name: str) -> Dict[str, Any]:
+    """Finds a relationship type object by its name."""
+    all_types = monica_api.list_relationship_types()
+    for rel_type in all_types:
+        if rel_type['name'].lower() == name.lower() or rel_type.get('name_reverse_relationship', '').lower() == name.lower():
+            return {"status": "success", "data": rel_type}
+    valid_types = [t['name'] for t in all_types]
+    return {"status": "error", "message": f"Relationship type '{name}' not found. Valid types include: {', '.join(valid_types)}"}
 
+# --- Public Agent-Facing Tools ---
 
-# --- Contacts and People Management ---
-
-def remember_person(
-    first_name: str, 
-    last_name: Optional[str] = None, 
-    nickname: Optional[str] = None, 
-    gender_name: str = "Rather not say"
-) -> str:
+def remember_person(first_name: str, last_name: Optional[str] = None, nickname: Optional[str] = None) -> Dict[str, Any]:
     """
     Creates a new contact in Monica.
 
@@ -81,281 +71,178 @@ def remember_person(
         first_name: The first name of the person.
         last_name: The last name of the person.
         nickname: The person's nickname.
-        gender_name: The name of the person's gender (e.g., "Man", "Woman"). Defaults to 'Rather not say'.
-                     A list of available genders can be retrieved via `monica_api.list_genders()`.
 
     Returns:
-        A confirmation string with the new contact's name and ID.
+        A dictionary with the result of the operation.
     """
-    # genders = monica_api.list_genders()
-    # gender_id = None
-    # for gender in genders:
-    #     if gender['name'].lower() == gender_name.lower():
-    #         gender_id = gender['id']
-    #         break
-    # if gender_id is None:
-    #     raise ValueError(f"Gender '{gender_name}' is not a valid option. Please choose from the available genders.")
+    try:
+        contact = monica_api.create_contact(
+            first_name=first_name, 
+            last_name=last_name, 
+            nickname=nickname
+        )
+        return {"status": "success", "data": contact}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
-    contact = monica_api.create_contact(
-        first_name=first_name, 
-        last_name=last_name, 
-        nickname=nickname, 
-        # gender_id=gender_id
-    )
-    return f"Successfully remembered {contact.get('complete_name')} with ID {contact.get('id')}."
-
-def find_people(query: str) -> Union[str, List[Dict[str, Any]]]:
-    """Searches for contacts matching a specific query."""
+def find_people(query: str) -> Dict[str, Any]:
+    """Searches for contacts matching a specific name or query."""
     contacts = monica_api.list_contacts(query=query)
     if not contacts:
-        return "No people found matching that search."
-    return [{
+        return {"status": "success", "data": [], "message": "No people found matching that search."}
+    
+    # Return a simplified list for the agent to process
+    simplified_contacts = [{
         "id": c.get('id'),
         "name": c.get('complete_name', f"{c.get('first_name')} {c.get('last_name') or ''}".strip()),
         "job": c.get('information', {}).get('career', {}).get('job'),
-        "company": c.get('information', {}).get('career', {}).get('company'),
     } for c in contacts]
+    return {"status": "success", "data": simplified_contacts}
 
 def get_details_about_person(person_name: str) -> Dict[str, Any]:
-    """Retrieves all available details for a specific person."""
-    contact = _find_contact_by_name(person_name)
-    return monica_api.get_contact(contact['id'])
+    """Retrieves all available details for a specific person, including notes, tasks, etc."""
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+    
+    contact = contact_result["data"]
+    details = monica_api.get_contact(contact['id'])
+    return {"status": "success", "data": details}
 
-def forget_person(person_name: str) -> str:
+def forget_person(person_name: str) -> Dict[str, Any]:
     """Deletes a contact from Monica. This action is permanent."""
-    contact = monica_api.get_contact_by_name(person_name)
-    monica_api.delete_contact(contact['id'])
-    return f"Successfully forgot the contact '{person_name}' (ID: {contact['id']})."
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+    
+    contact_id = contact_result["data"]['id']
+    monica_api.delete_contact(contact_id)
+    return {"status": "success", "data": {"deleted": True, "id": contact_id, "name": person_name}}
 
-
-# --- Notes / Memories ---
-
-def remember_something_about(person_name: str, memory_text: str, is_important: bool = False) -> str:
+def remember_something_about(person_name: str, memory_text: str, is_important: bool = False) -> Dict[str, Any]:
     """Adds a new note or "memory" to a contact's profile."""
-    contact = _find_contact_by_name(person_name)
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+    
+    contact = contact_result["data"]
     note = monica_api.create_note(contact_id=contact['id'], body=memory_text, is_favorite=is_important)
-    status = "an important" if is_important else "a"
-    return f"Successfully remembered {status} memory about {person_name}. (Note ID: {note['id']})"
+    return {"status": "success", "data": note}
 
-def get_memories_about(person_name: str) -> List[Dict[str, Any]]:
+def get_memories_about(person_name: str) -> Dict[str, Any]:
     """Retrieves all notes ("memories") associated with a specific person."""
-    contact = _find_contact_by_name(person_name)
-    return monica_api.list_contact_notes(contact['id'])
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+        
+    notes = monica_api.list_contact_notes(contact_result["data"]['id'])
+    return {"status": "success", "data": notes}
 
-
-# --- Activities, Calls, Conversations ---
-
-def log_activity_with(
-    people_names: List[str],
-    summary: str,
-    activity_type_name: str,
-    date: str, # "YYYY-MM-DD"
-    description: Optional[str] = None
-) -> str:
-    """Logs an activity that occurred with one or more people."""
-    contact_ids = [_find_contact_by_name(name)['id'] for name in people_names]
-    activity_types = monica_api.list_activity_types()
-    activity_type_id = next((at['id'] for at in activity_types if at['name'].lower() == activity_type_name.lower()), None)
-    if not activity_type_id:
-        raise ValueError(f"Activity type '{activity_type_name}' not found.")
-    activity = monica_api.create_activity(
-        contact_ids=contact_ids, summary=summary, activity_type_id=activity_type_id,
-        happened_at=date, description=description or ""
-    )
-    return f"Successfully logged activity '{summary}' with ID {activity['id']}."
-
-def log_call_with(person_name: str, date: str, description: str) -> str:
-    """Logs a phone call made with a specific contact."""
-    contact = _find_contact_by_name(person_name)
-    call = monica_api.create_call(contact_id=contact['id'], called_at=date, content=description)
-    return f"Successfully logged a call with {person_name} on {date}. (Call ID: {call['id']})"
-
-def start_conversation_with(person_name: str, date: str, medium: str) -> str:
+def log_call_with(person_name: str, description: str, date: Optional[str] = None) -> Dict[str, Any]:
     """
-    Creates a new conversation container for a contact, specifying the communication medium.
-    After creating the conversation, you can add messages to it using `add_message_to_conversation`.
+    Logs a phone call made with a specific contact.
+    
+    Args:
+        person_name: The name of the person who was called.
+        description: A summary of what was discussed in the call.
+        date: The date of the call in "YYYY-MM-DD" format. Defaults to today.
+    """
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+    
+    call_date = date or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    call = monica_api.create_call(contact_id=contact_result["data"]['id'], called_at=call_date, content=description)
+    return {"status": "success", "data": call}
 
+def set_relationship(person1_name: str, relationship_name: str, person2_name: str) -> Dict[str, Any]:
+    """Defines a relationship between two contacts. E.g., set_relationship("John Doe", "Spouse", "Jane Doe")."""
+    contact1_result = _find_contact_by_name(person1_name)
+    if contact1_result["status"] == "error":
+        return contact1_result
+
+    contact2_result = _find_contact_by_name(person2_name)
+    if contact2_result["status"] == "error":
+        return contact2_result
+
+    rel_type_result = _find_relationship_type_by_name(relationship_name)
+    if rel_type_result["status"] == "error":
+        return rel_type_result
+        
+    relationship = monica_api.create_relationship(
+        contact_is=contact1_result['data']['id'], 
+        relationship_type_id=rel_type_result['data']['id'], 
+        of_contact=contact2_result['data']['id']
+    )
+    return {"status": "success", "data": relationship}
+
+def create_task_for(person_name: str, title: str, description: Optional[str] = None) -> Dict[str, Any]:
+    """Creates a to-do task related to a specific person."""
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+        
+    task = monica_api.create_task(contact_id=contact_result['data']['id'], title=title, description=description)
+    return {"status": "success", "data": task}
+
+def mark_task_as_complete(task_id: int) -> Dict[str, Any]:
+    """Marks a specific task as complete by its ID."""
+    try:
+        task = monica_api.get_task(task_id)
+        if task.get('completed'):
+            return {"status": "success", "data": task, "message": f"Task ID {task_id} was already complete."}
+        
+        updated_task = monica_api.update_task(task_id=task_id, contact_id=task['contact']['id'], completed=1)
+        return {"status": "success", "data": updated_task}
+    except Exception as e:
+        return {"status": "error", "message": f"Could not find or update task with ID {task_id}. Error: {e}"}
+
+def set_reminder_for(person_name: str, title: str, date: str, frequency_type: Literal["one_time", "week", "month", "year"] = "one_time") -> Dict[str, Any]:
+    """
+    Sets a reminder for a contact.
+    
     Args:
         person_name: The name of the contact.
-        date: The date the conversation took place ("YYYY-MM-DD").
-        medium: The communication medium (e.g., "Email", "Twitter", "SMS"). Must match an existing Contact Field Type.
-
-    Returns:
-        A confirmation string with the new conversation's ID.
+        title: The title of the reminder.
+        date: The date for the reminder in "YYYY-MM-DD" format.
+        frequency_type: How often the reminder should repeat.
     """
-    contact = _find_contact_by_name(person_name)
-    field_types = monica_api.list_contact_field_types()
-    field_type_id = next((ft['id'] for ft in field_types if ft['name'].lower() == medium.lower()), None)
-    if not field_type_id:
-        raise ValueError(f"Communication medium '{medium}' not found. Please use a valid Contact Field Type name.")
-    conversation = monica_api.create_conversation(contact_id=contact['id'], happened_at=date, contact_field_type_id=field_type_id)
-    return f"Started a new conversation with {person_name} on {medium}. (Conversation ID: {conversation['id']})"
-
-def add_message_to_conversation(conversation_id: int, content: str, written_by: Literal["me", "them"], date: Optional[str] = None) -> str:
-    """Adds a message to an existing conversation."""
-    conversation = monica_api.get_conversation(conversation_id)
-    contact_id = conversation['contact']['id']
-    written_at = date or datetime.now().strftime("%Y-%m-%d")
-    written_by_me = True if written_by == "me" else False
-    
-    message = monica_api.add_message_to_conversation(conversation_id, contact_id, written_at, written_by_me, content)
-    return f"Successfully added message to conversation {conversation_id}."
-
-# --- Relationships ---
-
-def set_relationship(person1_name: str, relationship_name: str, person2_name: str) -> str:
-    """Defines a relationship between two contacts. E.g., set_relationship("John Doe", "Spouse", "Jane Doe")"""
-    contact1 = _find_contact_by_name(person1_name)
-    contact2 = _find_contact_by_name(person2_name)
-    rel_type = _find_relationship_type_by_name(relationship_name)
-    relationship = monica_api.create_relationship(contact_is=contact1['id'], relationship_type_id=rel_type['id'], of_contact=contact2['id'])
-    return f"Successfully set relationship: {person1_name} is now {rel_type['name']} of {person2_name}."
-
-# --- Tasks, Reminders, Debts ---
-
-def create_task_for(person_name: str, title: str, description: Optional[str] = None) -> str:
-    """Creates a to-do task related to a specific person."""
-    contact = _find_contact_by_name(person_name)
-    task = monica_api.create_task(contact_id=contact['id'], title=title, description=description)
-    return f"Task '{task['title']}' created for {person_name} (ID: {task['id']})."
-
-def mark_task_as_complete(task_id: int) -> str:
-    """Marks a specific task as complete."""
-    task = monica_api.get_task(task_id)
-    if task['completed']:
-        return f"Task ID {task_id} ('{task['title']}') was already marked as complete."
-    updated_task = monica_api.update_task(task_id=task_id, contact_id=task['contact']['id'], completed=1)
-    return f"Task ID {updated_task['id']} ('{updated_task['title']}') has been marked as complete."
-
-def set_reminder_for(
-    person_name: str,
-    title: str,
-    date: str, # "YYYY-MM-DD"
-    frequency_type: Literal["one_time", "week", "month", "year"] = "one_time",
-    frequency_number: Optional[int] = 1
-) -> str:
-    """Sets a reminder for a contact. For recurring reminders, set frequency_type and frequency_number."""
-    contact = _find_contact_by_name(person_name)
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+        
     reminder = monica_api.create_reminder(
-        contact_id=contact['id'], title=title, next_expected_date=date,
-        frequency_type=frequency_type, frequency_number=frequency_number
+        contact_id=contact_result['data']['id'], title=title, next_expected_date=date,
+        frequency_type=frequency_type, frequency_number=1
     )
-    return f"Reminder '{title}' set for {person_name} on {date}. (ID: {reminder['id']})"
+    return {"status": "success", "data": reminder}
 
-def track_debt(
-    person_who_owes_money: str,
-    person_who_is_owed_money: str,
-    amount: float,
-    reason: Optional[str] = None,
-    is_settled: bool = False
-) -> str:
-    """Tracks a debt between the user ('me') and another contact."""
-    if person_who_owes_money.lower() == 'me' and person_who_is_owed_money.lower() == 'me':
-        raise ValueError("Cannot create a debt where you owe money to yourself.")
-    if person_who_owes_money.lower() != 'me' and person_who_is_owed_money.lower() != 'me':
-        raise ValueError("One of the parties in the debt must be 'me'. This tool tracks your debts, not debts between two other people.")
-
-    if person_who_owes_money.lower() == 'me':
-        contact = _find_contact_by_name(person_who_is_owed_money)
-        in_debt, desc = "yes", f"I owe {contact['first_name']} ${amount}."
-    else: # person_who_is_owed_money is 'me'
-        contact = _find_contact_by_name(person_who_owes_money)
-        in_debt, desc = "no", f"{contact['first_name']} owes me ${amount}."
-
-    status = "complete" if is_settled else "inprogress"
-    debt = monica_api.create_debt(contact_id=contact['id'], in_debt=in_debt, status=status, amount=int(amount), reason=reason)
-    return f"Successfully tracked debt (ID: {debt['id']}): {desc}"
-
-
-# --- Gifts ---
-
-def log_gift(person_name: str, gift_name: str, status: Literal["idea", "offered", "received"], date: Optional[str] = None, amount: Optional[float] = None) -> str:
-    """
-    Logs a gift idea, a gift you've offered, or a gift you've received.
-
-    Args:
-        person_name: The name of the contact associated with the gift.
-        gift_name: A description of the gift.
-        status: The status of the gift.
-                - 'idea': A gift idea for this person.
-                - 'offered': A gift you gave to this person.
-                - 'received': A gift you received from this person.
-        date: The date the gift was given/received ("YYYY-MM-DD").
-        amount: The monetary value of the gift.
-
-    Returns:
-        A confirmation string.
-    """
-    contact = _find_contact_by_name(person_name)
-    gift = monica_api.create_gift(contact_id=contact['id'], name=gift_name, status=status, date=date, amount=amount)
-    return f"Successfully logged gift '{gift_name}' for {person_name} with status '{status}'."
-
-# --- Career / Work ---
-
-def log_job_for_person(person_name: str, job_title: str, company_name: str, start_date: Optional[str] = None) -> str:
+def log_job_for_person(person_name: str, job_title: str, company_name: str) -> Dict[str, Any]:
     """
     Logs an occupation (job) for a contact. If the company doesn't exist, it will be created.
-
-    Args:
-        person_name: The name of the contact.
-        job_title: The person's job title.
-        company_name: The name of the company.
-        start_date: The date the job started ("YYYY-MM-DD").
-
-    Returns:
-        A confirmation string.
     """
-    contact = _find_contact_by_name(person_name)
-    _find_or_create_company(company_name)
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+    
+    try:
+        _find_or_create_company(company_name)
+        result = monica_api.set_contact_occupation(
+            contact_id=contact_result['data']['id'],
+            job_title=job_title,
+            company_name=company_name
+        )
+        return {"status": "success", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
-    monica_api.set_contact_occupation(
-        contact_id=contact['id'],
-        job_title=job_title,
-        company_name=company_name
-    )
-
-    return f"Successfully logged that {person_name} works as '{job_title}' at {company_name}."
-
-# --- Tags ---
-
-def tag_person(person_name: str, tags: List[str]) -> str:
+def tag_person(person_name: str, tags: List[str]) -> Dict[str, Any]:
     """
     Adds one or more tags to a contact. New tags will be created if they don't exist.
-    
-    Args:
-        person_name: The name of the contact to tag.
-        tags: A list of tag names to apply to the contact.
-
-    Returns:
-        A confirmation string.
     """
-    contact = _find_contact_by_name(person_name)
-    monica_api.set_tags_for_contact(contact['id'], tags)
-    return f"Successfully tagged {person_name} with: {', '.join(tags)}."
-
-def untag_person(person_name: str, tags_to_remove: List[str]) -> str:
-    """
-    Removes one or more tags from a contact.
-    
-    Args:
-        person_name: The name of the contact to untag.
-        tags_to_remove: A list of tag names to remove from the contact.
-
-    Returns:
-        A confirmation string.
-    """
-    contact = _find_contact_by_name(person_name)
-    tag_ids_to_remove = []
-    for tag_name in tags_to_remove:
-        tag_obj = _find_tag_by_name(tag_name)
-        if tag_obj:
-            tag_ids_to_remove.append(tag_obj['id'])
-        else:
-            return f"Cannot untag: Tag '{tag_name}' not found for contact {person_name}."
-
-    if not tag_ids_to_remove:
-        return f"No matching tags found to remove from {person_name}."
-
-    monica_api.unset_tags_for_contact(contact['id'], tag_ids_to_remove)
-    return f"Successfully removed tags: {', '.join(tags_to_remove)} from {person_name}."
-
+    contact_result = _find_contact_by_name(person_name)
+    if contact_result["status"] == "error":
+        return contact_result
+        
+    result = monica_api.set_tags_for_contact(contact_result['data']['id'], tags)
+    return {"status": "success", "data": result}

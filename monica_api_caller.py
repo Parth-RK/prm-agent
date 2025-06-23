@@ -89,6 +89,36 @@ def list_relationship_types() -> List[Dict[str, Any]]:
 
 # === Contacts ===
 
+def get_contact_by_name(name: str, exact_match: bool = True) -> Optional[Dict[str, Any]]:
+    """Finds a single contact by their first or full name."""
+    contacts = list_contacts(query=name)
+    if not contacts:
+        return None
+    
+    # Try for an exact match first
+    for contact in contacts:
+        full_name = f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip()
+        if name.lower() in full_name.lower():
+            return contact # Return the first good match
+            
+    if exact_match:
+        return None # If exact_match is required and we haven't found one.
+        
+    return contacts[0] # Otherwise, return the best guess
+
+def get_contact_summary(contact_id: int) -> Dict[str, Any]:
+    """Aggregates key information about a contact into a single object."""
+    contact_details = get_contact(contact_id)
+    notes = list_contact_notes(contact_id, limit=5) # Get last 5 notes
+    tasks = list_tasks(contact_id, limit=5) # Get last 5 tasks
+    
+    summary = {
+        "details": contact_details,
+        "recent_notes": notes.get('data', []) if isinstance(notes, dict) else notes,
+        "recent_tasks": tasks,
+    }
+    return summary
+
 def list_contacts(query: Optional[str] = None, page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
     """GET /contacts - Lists all contacts, with optional search query and pagination."""
     params = {"page": page, "limit": limit}
@@ -101,7 +131,47 @@ def get_contact(contact_id: int) -> Dict[str, Any]:
     return call(f"contacts/{contact_id}")
 
 def create_contact(first_name: str, **kwargs: Any) -> Dict[str, Any]:
-    """POST /contacts - Creates a new contact. 'first_name' is required."""
+    """POST /contacts - Creates a new contact. 'first_name' is required.
+
+    This function sets some boolean flags to False by default to ensure proper
+    API behavior. To associate a birthdate or deceased date, you must provide
+    the date components and set the corresponding 'is...known' flag to True.
+
+    Args:
+        first_name (str): The first name of the person. This is required.
+        **kwargs: Arbitrary keyword arguments that are passed directly to the
+            API payload. Supported optional parameters include:
+            - last_name (str): The contact's last name.
+            - nickname (str): The contact's nickname.
+            - gender_id (int): The ID for the gender (from list_genders()).
+            - is_birthdate_known (bool): Must be True if providing date parts.
+            - birthdate_year (int): Year of birth.
+            - birthdate_month (int): Month of birth (1-12).
+            - birthdate_day (int): Day of birth (1-31).
+            - is_deceased (bool): Set to True if the contact is deceased.
+            - is_deceased_date_known (bool): Must be True if providing date.
+            - food_preferences (str): Notes on food preferences.
+            - how_we_met (str): Description of how you met.
+            - work_job_title (str): The contact's job title.
+            - work_company_name (str): The contact's employer.
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the newly created contact
+                        as returned by the API.
+
+    Example:
+        create_contact(
+            first_name="Jane",
+            last_name="Doe",
+            nickname="Janie",
+            gender_id=2,  # Assuming 'Woman' is ID 2
+            is_birthdate_known=True,
+            birthdate_year=1990,
+            birthdate_month=5,
+            birthdate_day=15,
+            work_job_title="Software Engineer"
+        )
+    """
     payload = {"first_name": first_name, "is_birthdate_known": False, "is_deceased": False, "is_deceased_date_known": False}
     payload.update(kwargs)
     return call("contacts", "POST", payload)
@@ -140,7 +210,43 @@ def set_contact_occupation(contact_id: int, job_title: str = "", company_name: s
 # === Contact Sub-Resources: Addresses ===
 
 def add_address(contact_id: int, name: str, **kwargs: Any) -> Dict[str, Any]:
-    """POST /addresses - Creates a new address for a contact."""
+    """POST /addresses - Creates a new address and associates it with a contact.
+
+    This function requires the ID of the contact and a descriptive name for
+    the address. All other address components are optional and can be passed
+    as keyword arguments.
+
+    Args:
+        contact_id (int): The unique ID of the contact to whom this address
+                          will be linked. This is required.
+        name (str): A descriptive label for the address (e.g., "Home", "Work",
+                    "Mailing Address"). This is required.
+        **kwargs: Arbitrary keyword arguments that are passed directly
+            to the API. Supported optional parameters include:
+            - street (str): The street and number.
+            - city (str): The city name.
+            - province (str): The state or province name.
+            - postal_code (str): The ZIP or postal code.
+            - country (str): The 2-letter ISO code for the country (e.g., 'US').
+            - latitude (float): The geographic latitude.
+            - longitude (float): The geographic longitude.
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the newly created address
+                        object as returned by the API.
+
+    Example:
+        # Assuming you have a contact with ID 123
+        add_address(
+            contact_id=123,
+            name="Work Office",
+            street="123 Innovation Drive, Suite 404",
+            city="Palo Alto",
+            province="CA",
+            postal_code="94301",
+            country="US"
+        )
+    """
     payload = {"contact_id": contact_id, "name": name}
     payload.update(kwargs)
     return call("addresses", "POST", payload=payload)
@@ -215,7 +321,7 @@ def delete_relationship(relationship_id: int) -> Optional[Dict[str, Any]]:
 
 
 # === Activities ===
-
+"""Activities are not working for unknown reasons."""
 # def list_all_activities(page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
 #     """GET /activities - Lists all activities across all contacts."""
 #     return call("activities", params={"page": page, "limit": limit})
@@ -261,7 +367,7 @@ def list_all_notes(limit: int = None, page: int = None) -> Dict[str, Any]:
         params['page'] = page
     return call("notes", "GET", params=params)
 
-def list_contact_notes(contact_id: int, limit: int = None, page: int = None) -> Dict[str, Any]:
+def list_contact_notes(contact_id: int, limit: Optional[int] = None, page: Optional[int] = None) -> Dict[str, Any]:
     """GET /contacts/:id/notes - List all notes for a specific contact."""
     params = {}
     if limit is not None:
@@ -792,7 +898,38 @@ def get_company(company_id: int) -> Dict[str, Any]:
     return call(f"companies/{company_id}")
 
 def create_company(name: str, **kwargs: Any) -> Dict[str, Any]:
-    """POST /companies - Creates a company."""
+    """POST /companies - Creates a new company in Monica.
+
+    This function takes the company's name as a required argument and
+    allows for any other supported API fields to be passed as keyword
+    arguments.
+
+    Args:
+        name (str): The name of the company. This is required.
+        **kwargs: Arbitrary keyword arguments that are passed directly
+            to the API. Supported optional parameters include:
+            - website (str): The company's website address.
+            - number_of_employees (int): The number of employees.
+            - type (str): The type of company (e.g., "Corporation").
+            - industry (str): The industry the company is in.
+            - street (str): The street address.
+            - city (str): The city name.
+            - province (str): The state or province name.
+            - postal_code (str): The ZIP or postal code.
+            - country (str): The 2-letter ISO code for the country (e.g., 'US').
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the newly created company
+                        as returned by the API.
+
+    Example:
+        create_company(
+            name="Innovate Corp",
+            website="https://innovatecorp.com",
+            industry="Technology",
+            city="San Francisco"
+        )
+    """
     payload = {"name": name}
     payload.update(kwargs)
     return call("companies", "POST", payload)
@@ -802,6 +939,32 @@ def delete_company(company_id: int) -> Dict[str, Any]:
     call(f"companies/{company_id}", "DELETE")
     return {"deleted": True, "id": company_id}
 
+
+# === Example Usage ===
 if __name__ == "__main__":
-    print("--- Monica API Wrapper ---")
-    print("Used to interact with Monica CRM API.")
+    print("--- Monica API Caller Full Demo ---")
+    created_contact_id = None
+    try:
+        user = get_user()
+        print(f"Authenticated as: {user.get('first_name')} ({user.get('email')})")
+        print("\n[1] Creating contact...")
+        contact = create_contact("Sam", last_name="Jones")
+        created_contact_id = contact["id"]
+        print(f"  -> Created: {contact['first_name']} {contact['last_name']} (ID: {created_contact_id})")
+
+        print("\n[2] Creating a note for the contact...")
+        updated_contact_note = create_note(created_contact_id, body="This is a note about Sam.")
+        print(f"  -> Created note with ID: {updated_contact_note['id']} and body: '{updated_contact_note['body']}'")
+
+    except Exception as e:
+        print(f"\nAN ERROR OCCURRED: {e}")
+    finally:
+        if created_contact_id:
+            print("\n--- Cleaning up created resources ---")
+            d = input(f"Are you sure you want to delete contact {created_contact_id}? (y/n): ").strip().lower()
+            if d == 'y':
+                delete_contact(created_contact_id)
+                print(f"  -> Deleting contact {created_contact_id}...")
+                print("--- Cleanup complete ---")
+            else:
+                print("  -> Cleanup skipped.")

@@ -1,7 +1,7 @@
 {
-    "total_calls": 10,
+    "total_calls": 0,
     "files": {
-        "main.py": 10,
+        "main.py": 0,
         "app.py": 0
     }
 }
