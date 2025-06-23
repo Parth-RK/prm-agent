@@ -89,6 +89,36 @@ def list_relationship_types() -> List[Dict[str, Any]]:
 
 # === Contacts ===
 
+def get_contact_by_name(name: str, exact_match: bool = True) -> Optional[Dict[str, Any]]:
+    """Finds a single contact by their first or full name."""
+    contacts = list_contacts(query=name)
+    if not contacts:
+        return None
+    
+    # Try for an exact match first
+    for contact in contacts:
+        full_name = f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip()
+        if name.lower() in full_name.lower():
+            return contact # Return the first good match
+            
+    if exact_match:
+        return None # If exact_match is required and we haven't found one.
+        
+    return contacts[0] # Otherwise, return the best guess
+
+def get_contact_summary(contact_id: int) -> Dict[str, Any]:
+    """Aggregates key information about a contact into a single object."""
+    contact_details = get_contact(contact_id)
+    notes = list_contact_notes(contact_id, limit=5) # Get last 5 notes
+    tasks = list_tasks(contact_id, limit=5) # Get last 5 tasks
+    
+    summary = {
+        "details": contact_details,
+        "recent_notes": notes.get('data', []) if isinstance(notes, dict) else notes,
+        "recent_tasks": tasks,
+    }
+    return summary
+
 def list_contacts(query: Optional[str] = None, page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
     """GET /contacts - Lists all contacts, with optional search query and pagination."""
     params = {"page": page, "limit": limit}
@@ -261,7 +291,7 @@ def list_all_notes(limit: int = None, page: int = None) -> Dict[str, Any]:
         params['page'] = page
     return call("notes", "GET", params=params)
 
-def list_contact_notes(contact_id: int, limit: int = None, page: int = None) -> Dict[str, Any]:
+def list_contact_notes(contact_id: int, limit: Optional[int] = None, page: Optional[int] = None) -> Dict[str, Any]:
     """GET /contacts/:id/notes - List all notes for a specific contact."""
     params = {}
     if limit is not None:
