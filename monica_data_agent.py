@@ -3,7 +3,7 @@ import os
 import json
 import google.generativeai as genai
 import monica_alf as alf
-import temp
+import monica_api_caller
 
 class MonicaDataAgent:
     """
@@ -20,11 +20,11 @@ class MonicaDataAgent:
         
         # --- Define the toolset from our agent-level functions library ---
         self.tools = [
+            # monica_alf functions
             alf.remember_person,
             alf.find_people,
             alf.get_details_about_person,
             alf.forget_person,
-            temp.delete_contact,
             alf.remember_something_about,
             alf.get_memories_about,
             alf.log_call_with,
@@ -34,15 +34,96 @@ class MonicaDataAgent:
             alf.set_reminder_for,
             alf.log_job_for_person,
             alf.tag_person,
-            # any and all None type errors are caused because the agent couldn't find right tool to execute the task.
-            # so if such error occurs, just add the name of the tool here from monica_api_caller.py or monica_alf.py
+            # monica_api_caller functions
             
+            monica_api_caller.get_user,
+            monica_api_caller.list_genders,
+            monica_api_caller.list_currencies,
+            monica_api_caller.list_countries,
+            monica_api_caller.list_activity_types,
+            monica_api_caller.list_contact_field_types,
+            monica_api_caller.list_relationship_types,
+            monica_api_caller.get_contact_by_name,
+            monica_api_caller.get_contact_summary,
+            monica_api_caller.list_contacts,
+            monica_api_caller.get_contact,
+            
+            monica_api_caller.create_contact,
+            monica_api_caller.update_contact,
+            monica_api_caller.delete_contact,
+            monica_api_caller.set_contact_occupation,
+            monica_api_caller.add_address,
+            monica_api_caller.update_address,
+            monica_api_caller.delete_address,
+            monica_api_caller.set_contact_field_value,
+            monica_api_caller.upload_document_for_contact,
+            monica_api_caller.upload_photo_for_contact,
+            monica_api_caller.create_relationship,
+            monica_api_caller.update_relationship,
+            monica_api_caller.delete_relationship,
+            monica_api_caller.list_all_notes,
+            monica_api_caller.list_contact_notes,
+            monica_api_caller.get_note,
+            monica_api_caller.create_note,
+            monica_api_caller.update_note,
+            monica_api_caller.delete_note,
+            monica_api_caller.create_reminder,
+            monica_api_caller.update_reminder,
+            monica_api_caller.delete_reminder,
+            monica_api_caller.get_task,
+            monica_api_caller.list_tasks,
+            monica_api_caller.create_task,
+            monica_api_caller.update_task,
+            monica_api_caller.delete_task,
+            monica_api_caller.list_debts,
+            monica_api_caller.get_debt,
+            monica_api_caller.create_debt,
+            monica_api_caller.update_debt,
+            monica_api_caller.delete_debt,
+            monica_api_caller.list_tags,
+            monica_api_caller.get_tag,
+            monica_api_caller.create_tag,
+            monica_api_caller.update_tag,
+            monica_api_caller.delete_tag,
+            monica_api_caller.set_tags_for_contact,
+            monica_api_caller.unset_tags_for_contact,
+            monica_api_caller.unset_all_tags_for_contact,
+            monica_api_caller.list_journal_entries,
+            monica_api_caller.get_journal_entry,
+            monica_api_caller.create_journal_entry,
+            monica_api_caller.update_journal_entry,
+            monica_api_caller.delete_journal_entry,
+            monica_api_caller.list_gifts,
+            monica_api_caller.get_gift,
+            monica_api_caller.create_gift,
+            monica_api_caller.update_gift,
+            monica_api_caller.delete_gift,
+            monica_api_caller.list_calls,
+            monica_api_caller.get_call,
+            monica_api_caller.create_call,
+            monica_api_caller.update_call,
+            monica_api_caller.delete_call,
+            monica_api_caller.list_conversations,
+            monica_api_caller.get_conversation,
+            monica_api_caller.create_conversation,
+            monica_api_caller.update_conversation,
+            monica_api_caller.delete_conversation,
+            monica_api_caller.add_message_to_conversation,
+            monica_api_caller.update_message_in_conversation,
+            monica_api_caller.delete_message,
+            monica_api_caller.list_companies,
+            monica_api_caller.get_company,
+            monica_api_caller.create_company,
+            monica_api_caller.delete_company,
         ]
 
         self.model = genai.GenerativeModel(
             model_name='gemini-2.5-flash',
             system_instruction="""You are a data execution engine. Your only job is to execute functions based on the user's request.
-            - You must use the provided tools to fulfill the request.
+            - You must use the provided tools to fulfill the request. Use alf tools for Monica Agent-Level Functions (ALF).
+            - If the user's request is ambiguous, make a best effort to call the most relevant tool.
+            - If you dont know something, you can call the relevent functions to gather information.
+            - 'get_' functions are used when you know specifics about the entity(like ID), 'list_' functions are used when you dont know the exact details.
             - To find a contact's ID for an action (like adding a note), ALWAYS use the 'find_people' tool first if the ID is not provided. The only exception is 'remember_person'.
             - If the user's request is ambiguous, make a best effort to call the most relevant tool.
             - You do not hold conversations. Your output is only the direct result from the function call.
