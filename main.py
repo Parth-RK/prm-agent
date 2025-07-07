@@ -3,7 +3,6 @@ import dotenv
 import google.generativeai as genai
 from monica_data_agent import MonicaDataAgent
 
-import utils
 
 dotenv.load_dotenv()
 
@@ -17,7 +16,8 @@ class StatefulOrchestrator:
         self.data_agent = MonicaDataAgent(api_key=gemini_api_key)
         genai.configure(api_key=gemini_api_key)
 
-        system_instruction = """You are a helpful and friendly AI best friend. Your goal is to help the user manage their personal and social life.
+        system_instruction = """You are a helpful and friendly AI best friend. Your goal is to help the user manage their personal and social life. Know everything about the User.
+        You can find all the stored information about the user by asking the data assistant, but your requests to it must be very direct, specific and concise.
 
         Your most important skill is **gathering complete information** before you act. When the user mentions something new (a person, task, event), do not try to save it immediately with partial details. Your job is to ask natural, clarifying follow-up questions to get a complete picture.
 

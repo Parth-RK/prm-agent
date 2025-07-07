@@ -17,8 +17,7 @@ Key Design Principles:
   tool-using model, clearly defining parameters and expected outcomes.
 """
 
-import json
-from typing import Dict, Any, List, Optional, Literal, Union
+from typing import Dict, Any, List, Optional, Literal
 from datetime import datetime
 import monica_api_caller as monica_api
 
