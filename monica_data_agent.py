@@ -31,7 +31,8 @@ class MonicaDataAgent:
             alf.mark_task_as_complete,
             alf.set_reminder_for,
             alf.log_job_for_person,
-            alf.tag_person,            
+            alf.tag_person,
+                 
             alf.get_user,
             alf.list_genders,
             alf.list_currencies,
@@ -116,7 +117,6 @@ class MonicaDataAgent:
             model_name='gemini-2.5-flash',
             system_instruction="""You are a data execution engine. Your only job is to execute functions based on the user's request.
             - You must use the provided tools to fulfill the request. Use alf tools for Monica Agent-Level Functions (ALF).
-            - If the user's request is ambiguous, make a best effort to call the most relevant tool.
             - If you dont know something, you can call the relevent functions to gather information.
             - 'get_' functions are used when you know specifics about the entity(like ID), 'list_' functions are used when you dont know the exact details.
             - To find a contact's ID for an action (like adding a note), ALWAYS use the 'find_people' tool first if the ID is not provided. The only exception is 'remember_person'.
@@ -125,6 +125,7 @@ class MonicaDataAgent:
             - If you determine that no tool is appropriate for the given task, return a JSON object: {"status": "error", "message": "No suitable tool found for the request."}
             - Finally, If there is the task prompt and the tool result, summarize the result in a natural language response in a way that completely answers the task prompt, also provide additional information if deemed useful.
             """
+            #- If the user's request is ambiguous or if there is no direct function to fulfil the complete request, pass the request to the planner agent.
         )
 
     def execute_task(self, task_prompt: str) -> str:

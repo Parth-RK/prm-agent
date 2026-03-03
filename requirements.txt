@@ -3,3 +3,4 @@ google-generativeai==0.8.5
 requests==2.32.3
 monica-client==1.0.0a1
 gradio
+dotenv
