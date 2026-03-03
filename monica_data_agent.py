@@ -113,8 +113,9 @@ class MonicaDataAgent:
             alf.delete_company,
         ]
 
+        model_name = os.environ.get("GEMINI_MODEL_NAME")
         self.model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash',
+            model_name=model_name,
             system_instruction="""You are a data execution engine. Your only job is to execute functions based on the user's request.
             - You must use the provided tools to fulfill the request. Use alf tools for Monica Agent-Level Functions (ALF).
             - If you dont know something, you can call the relevent functions to gather information.

@@ -48,7 +48,7 @@ class StatefulOrchestrator:
         """
 
         self.model = genai.GenerativeModel(
-            'gemini-2.5-flash',
+            model_name=os.environ.get("GEMINI_MODEL_NAME"),
             system_instruction=system_instruction
         )
         self.chat = self.model.start_chat(history=[])
