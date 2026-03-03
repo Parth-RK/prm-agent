@@ -1,7 +1,8 @@
 # monica_data_agent.py
 import os
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import monica_api_caller as alf
 
 class MonicaDataAgent:
@@ -11,12 +12,19 @@ class MonicaDataAgent:
     function call to the Monica Agent-Level Functions (ALF), execute it, and
     return the raw JSON result. It uses Gemini's native function-calling.
     """
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str = None, model_name: str = None, monica_api_url: str = None, monica_token: str = None):
+        api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("Gemini API key is required.")
+            raise ValueError("Gemini API key is required. Provide it as an argument or set GEMINI_API_KEY.")
 
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         
+        # Configure Monica API caller if credentials are provided
+        if monica_api_url and monica_token:
+            alf.configure(api_url=monica_api_url, token=monica_token)
+        elif os.environ.get("MONICA_API_URL") and os.environ.get("MONICA_TOKEN"):
+            alf.configure(api_url=os.environ.get("MONICA_API_URL"), token=os.environ.get("MONICA_TOKEN"))
+
         # --- Define the toolset from our agent-level functions library ---
         self.tools = [
             alf.remember_person,
@@ -113,10 +121,8 @@ class MonicaDataAgent:
             alf.delete_company,
         ]
 
-        model_name = os.environ.get("GEMINI_MODEL_NAME")
-        self.model = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction="""You are a data execution engine. Your only job is to execute functions based on the user's request.
+        self.model_name = model_name or os.environ.get("GEMINI_MODEL_NAME")
+        self.system_instruction="""You are a data execution engine. Your only job is to execute functions based on the user's request.
             - You must use the provided tools to fulfill the request. Use alf tools for Monica Agent-Level Functions (ALF).
             - If you dont know something, you can call the relevent functions to gather information.
             - 'get_' functions are used when you know specifics about the entity(like ID), 'list_' functions are used when you dont know the exact details.
@@ -126,8 +132,6 @@ class MonicaDataAgent:
             - If you determine that no tool is appropriate for the given task, return a JSON object: {"status": "error", "message": "No suitable tool found for the request."}
             - Finally, If there is the task prompt and the tool result, summarize the result in a natural language response in a way that completely answers the task prompt, also provide additional information if deemed useful.
             """
-            #- If the user's request is ambiguous or if there is no direct function to fulfil the complete request, pass the request to the planner agent.
-        )
 
     def execute_task(self, task_prompt: str) -> str:
         """
@@ -136,13 +140,20 @@ class MonicaDataAgent:
         """
         print(f"  [Executor Agent] Received task: '{task_prompt}'")
         try:
-            response = self.model.generate_content(
-                task_prompt,
-                tools=self.tools,
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=task_prompt,
+                config=types.GenerateContentConfig(
+                    tools=self.tools,
+                    system_instruction=self.system_instruction,
+                )
             )
             
             # The model has decided to call a function
-            fc = response.candidates[0].content.parts[0].function_call
+            if not response.function_calls:
+                return response.text
+                
+            fc = response.function_calls[0]
             tool_name = fc.name
             tool_args = {key: value for key, value in fc.args.items()}
 
@@ -162,7 +173,10 @@ class MonicaDataAgent:
                 "Based on the tool result, please provide a natural language response that directly answers the original task."
             )
             
-            final_response = self.model.generate_content(summarization_prompt)
+            final_response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=summarization_prompt
+            )
             
             return final_response.text
 

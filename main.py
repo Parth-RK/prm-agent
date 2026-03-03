@@ -1,6 +1,7 @@
 import os
 import dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from monica_data_agent import MonicaDataAgent
 
 
@@ -12,9 +13,13 @@ class StatefulOrchestrator:
     that gathers information conversationally. Once it has a complete "batch"
     of information, it delegates the execution to a dedicated, stateless Data Agent.
     """
-    def __init__(self, gemini_api_key: str):
-        self.data_agent = MonicaDataAgent(api_key=gemini_api_key)
-        genai.configure(api_key=gemini_api_key)
+    def __init__(self, gemini_api_key: str = None, model_name: str = None, monica_api_url: str = None, monica_token: str = None):
+        api_key = gemini_api_key or os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not found. Please provide it or set it in your environment.")
+        
+        self.data_agent = MonicaDataAgent(api_key=api_key, model_name=model_name, monica_api_url=monica_api_url, monica_token=monica_token)
+        self.client = genai.Client(api_key=api_key)
 
         system_instruction = """You are a helpful and friendly AI best friend. Your goal is to help the user manage their personal and social life. Know everything about the User.
         You can find all the stored information about the user by asking the data assistant, but your requests to it must be very direct, specific and concise.
@@ -47,11 +52,13 @@ class StatefulOrchestrator:
         <commit_task>Get details about person Jane Doe</commit_task>
         """
 
-        self.model = genai.GenerativeModel(
-            model_name=os.environ.get("GEMINI_MODEL_NAME"),
-            system_instruction=system_instruction
+        model_name = model_name or os.environ.get("GEMINI_MODEL_NAME") or "gemini-1.5-pro-preview"
+        self.chat = self.client.chats.create(
+            model=model_name,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction
+            )
         )
-        self.chat = self.model.start_chat(history=[])
         # print("🤖 AI Best Friend is online. Let's chat!")
 
     def process_user_turn(self, user_input: str):
@@ -59,7 +66,7 @@ class StatefulOrchestrator:
         Processes a single turn of the conversation, handling the orchestration logic.
         Returns a tuple of (bot_response, log_string).
         """
-        response = self.chat.send_message(user_input)
+        response = self.chat.send_message(message=user_input)
         response_text = response.text
         
         if "<commit_task>" in response_text:
@@ -79,7 +86,7 @@ class StatefulOrchestrator:
             - If the status is 'error', apologize naturally and mention the error message in simple terms. For instance, "Ah, sorry, I couldn't do that. It seems like there are multiple people named 'John'. Which one did you mean?"
             Generate ONLY the user-facing response.
             """
-            final_response = self.chat.send_message(final_prompt)
+            final_response = self.chat.send_message(message=final_prompt)
             
             bot_response_parts = []
             if display_text:

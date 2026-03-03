@@ -10,21 +10,32 @@ dotenv.load_dotenv()
 API_URL = os.environ.get("MONICA_API_URL")
 API_TOKEN = os.environ.get("MONICA_TOKEN")
 
-if not API_URL or not API_TOKEN:
-    raise ValueError("MONICA_API_URL and MONICA_TOKEN must be set in your environment or a .env file.")
+def configure(api_url: str, token: str):
+    global API_URL, API_TOKEN
+    API_URL = api_url
+    API_TOKEN = token
 
-HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+def get_headers():
+    if not API_TOKEN:
+        raise ValueError("MONICA_TOKEN is not set. Please configure it.")
+    return {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+
+def get_api_url():
+    if not API_URL:
+        raise ValueError("MONICA_API_URL is not set. Please configure it.")
+    return API_URL
 
 
 # === Core API Helpers ===
 
 def call(endpoint: str, method: str = "GET", payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, use_api_prefix: bool = True) -> Any:
     """A helper function to make JSON requests to the Monica API."""
-    base_url = API_URL if use_api_prefix else API_URL.replace('/api', '')
+    api_url = get_api_url()
+    base_url = api_url if use_api_prefix else api_url.replace('/api', '')
     url = f"{base_url}/{endpoint}"
     print(f"Calling {method} {url}")
     try:
-        resp = requests.request(method, url, json=payload, headers=HEADERS, params=params)
+        resp = requests.request(method, url, json=payload, headers=get_headers(), params=params)
         resp.raise_for_status()
         if resp.status_code == 204:
             return None
@@ -40,14 +51,15 @@ def call(endpoint: str, method: str = "GET", payload: Optional[Dict[str, Any]] =
 
 def upload_file(endpoint: str, filepath: str, file_key: str = "document", payload: Optional[Dict[str, Any]] = None) -> Any:
     """A flexible helper to upload files (documents, photos) to the Monica API."""
-    url = f"{API_URL}/{endpoint}"
+    api_url = get_api_url()
+    url = f"{api_url}/{endpoint}"
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"The file was not found at {filepath}")
 
     with open(filepath, 'rb') as f:
         files = {file_key: f}
         try:
-            resp = requests.post(url, data=payload, files=files, headers=HEADERS)
+            resp = requests.post(url, data=payload, files=files, headers=get_headers())
             resp.raise_for_status()
             return resp.json().get("data")
         except requests.exceptions.HTTPError as http_err:
@@ -1816,37 +1828,3 @@ def tag_person(person_name: str, tags: List[str]) -> Dict[str, Any]:
         
     result = set_tags_for_contact(contact_result['data']['id'], tags)
     return {"status": "success", "data": result}
-
-# ============================================================================================================
-
-# === Example Usage ===
-if __name__ == "__main__":
-    print("--- Monica API Caller Full Demo ---")
-    created_contact_id = None
-    try:
-        # user = get_user()
-        # print(f"Authenticated as: {user.get('first_name')} ({user.get('email')})")
-        # print("\n[1] Creating contact...")
-        # contact = create_contact("Sam", last_name="Jones")
-        # created_contact_id = contact["id"]
-        # print(f"  -> Created: {contact['first_name']} {contact['last_name']} (ID: {created_contact_id})")
-
-        # print("\n[2] Creating a note for the contact...")
-        # updated_contact_note = create_note(created_contact_id, body="This is a note about Sam.")
-        # print(f"  -> Created note with ID: {updated_contact_note['id']} and body: '{updated_contact_note['body']}'")
-        genders = list_genders()
-        for g in genders:
-            print("\n[3] Listing genders...", g['name'])
-
-    except Exception as e:
-        print(f"\nAN ERROR OCCURRED: {e}")
-    finally:
-        if created_contact_id:
-            print("\n--- Cleaning up created resources ---")
-            d = input(f"Are you sure you want to delete contact {created_contact_id}? (y/n): ").strip().lower()
-            if d == 'y':
-                delete_contact(created_contact_id)
-                print(f"  -> Deleting contact {created_contact_id}...")
-                print("--- Cleanup complete ---")
-            else:
-                print("  -> Cleanup skipped.")
