@@ -49,7 +49,7 @@ def chat_interface(user_input, history, orchestrator_state, logs_history, gemini
 
 with gr.Blocks(theme=gr.themes.Soft(), title="Genica") as demo:
     gr.Markdown("# 🤖 Genica the prm-agent")
-    gr.Markdown("Your personal AI assistant to help manage your social life. Start chatting below!")
+    gr.Markdown("Your personal AI assistant to help manage your social life. Start chatting below!\nhttps://github.com/parth-rk/prm-agent")
 
     with gr.Row():
         with gr.Column(scale=3):
